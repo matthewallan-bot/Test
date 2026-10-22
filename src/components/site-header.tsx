@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import { auth } from "@/lib/auth";
 
 const NAV = [
@@ -11,6 +12,10 @@ const NAV = [
 ];
 
 export async function SiteHeader() {
+  // Auth.js reads cookies / uses crypto during session resolution. With Cache
+  // Components this must be request-time so prerender does not trip
+  // blocking-prerender-crypto (layout already wraps this in <Suspense>).
+  await connection();
   const session = await auth();
 
   return (
