@@ -14,7 +14,7 @@ Official band site: merch ecommerce, accounts, free self-hosted music streaming,
 | Payments | Stripe behind a thin adapter (`src/lib/payments`) |
 | Media | Cloudflare R2 / S3-compatible for images + audio |
 
-Cost-first: Neon free tier, Vercel Hobby, R2, Stripe test mode.
+Cost-first: Neon free tier, R2, Stripe test mode. App hosting is local-first / undecided (not Vercel).
 
 ## Quick start (UI without secrets)
 
