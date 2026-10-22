@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Oswald, Source_Sans_3 } from "next/font/google";
+import { Suspense } from "react";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
@@ -32,7 +33,17 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${display.variable} ${body.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col font-sans">
-        <SiteHeader />
+        <Suspense
+          fallback={
+            <header className="border-b border-ink/10 bg-paper/70 px-4 py-3 md:px-6">
+              <span className="font-[family-name:var(--font-display)] text-lg font-semibold tracking-[0.04em] text-ink">
+                Fixed Reaction
+              </span>
+            </header>
+          }
+        >
+          <SiteHeader />
+        </Suspense>
         <main className="flex-1">{children}</main>
         <SiteFooter />
       </body>

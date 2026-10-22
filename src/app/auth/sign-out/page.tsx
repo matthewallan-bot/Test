@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { SignOutButton } from "./sign-out-button";
 
 export const metadata: Metadata = {
   title: "Sign out",
@@ -11,20 +11,10 @@ export default function SignOutPage() {
       <h1 className="font-[family-name:var(--font-display)] text-4xl tracking-wide text-ink">
         Sign out
       </h1>
-      <p className="mt-3 text-ink-soft">
-        POST to Auth.js sign-out when sessions are live.
-      </p>
-      <form action="/api/auth/signout" method="post" className="mt-6">
-        <button
-          type="submit"
-          className="rounded-sm bg-ink px-5 py-3 text-sm font-semibold uppercase tracking-wide text-paper hover:bg-signal"
-        >
-          Sign out
-        </button>
-      </form>
-      <Link href="/" className="mt-4 inline-block text-sm text-steel hover:text-signal">
-        Back home
-      </Link>
+      <p className="mt-2 text-sm text-ink-soft">End your session on this device.</p>
+      <div className="mt-8">
+        <SignOutButton />
+      </div>
     </div>
   );
 }

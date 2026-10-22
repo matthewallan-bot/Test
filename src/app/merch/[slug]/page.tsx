@@ -1,18 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { Suspense } from "react";
-import { PRODUCTS, formatMoney, getProduct } from "@/data/products";
+import { AddToCartButton } from "@/components/add-to-cart-button";
+import { formatMoney, getProductBySlug, listProducts } from "@/lib/catalog";
 
 type Props = { params: Promise<{ slug: string }> };
 
 export async function generateStaticParams() {
-  return PRODUCTS.map((p) => ({ slug: p.slug }));
+  const products = await listProducts();
+  return products.map((p) => ({ slug: p.slug }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const product = getProduct(slug);
+  const product = await getProductBySlug(slug);
   return {
     title: product?.name ?? "Merch",
     description: product?.description,
@@ -34,8 +37,9 @@ export default function MerchDetailPage({ params }: Props) {
 }
 
 async function MerchDetail({ params }: Props) {
+  await connection();
   const { slug } = await params;
-  const product = getProduct(slug);
+  const product = await getProductBySlug(slug);
   if (!product) notFound();
 
   return (
@@ -55,24 +59,9 @@ async function MerchDetail({ params }: Props) {
         </p>
         <p className="mt-6 text-ink-soft">{product.description}</p>
 
-        <label className="mt-8 block text-sm font-medium text-ink">
-          Variant
-          <select className="mt-2 w-full border border-ink/20 bg-paper px-3 py-2">
-            {product.variants.map((v) => (
-              <option key={v.sku} value={v.sku}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <AddToCartButton skus={product.variants} />
 
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Link
-            href="/cart"
-            className="rounded-sm bg-signal px-5 py-3 text-sm font-semibold uppercase tracking-wide text-paper hover:bg-signal-deep"
-          >
-            Add to cart (stub)
-          </Link>
+        <div className="mt-6">
           <Link
             href="/merch"
             className="rounded-sm border border-ink/20 px-5 py-3 text-sm font-semibold uppercase tracking-wide text-ink hover:border-signal"

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Suspense } from "react";
+import { SignInForm } from "@/components/sign-in-form";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -12,49 +13,12 @@ export default function SignInPage() {
         Sign in
       </h1>
       <p className="mt-2 text-sm text-ink-soft">
-        Auth.js credentials stub — wire to Postgres users next.
+        Credentials checked against hashed passwords in{" "}
+        <code className="text-sm">users</code>.
       </p>
-      <form
-        className="mt-8 space-y-4"
-        action="/api/auth/callback/credentials"
-        method="post"
-      >
-        <label className="block text-sm font-medium">
-          Email
-          <input
-            name="email"
-            type="email"
-            required
-            className="mt-2 w-full border border-ink/20 bg-paper px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm font-medium">
-          Password
-          <input
-            name="password"
-            type="password"
-            required
-            className="mt-2 w-full border border-ink/20 bg-paper px-3 py-2"
-          />
-        </label>
-        <button
-          type="submit"
-          className="w-full rounded-sm bg-ink px-4 py-3 text-sm font-semibold uppercase tracking-wide text-paper hover:bg-signal"
-        >
-          Sign in
-        </button>
-      </form>
-      <p className="mt-4 text-sm text-ink-soft">
-        New here?{" "}
-        <Link href="/auth/sign-up" className="font-semibold text-signal">
-          Create an account
-        </Link>
-      </p>
-      <p className="mt-2 text-sm text-ink-soft">
-        <Link href="/auth/forgot-password" className="text-steel hover:text-signal">
-          Forgot password
-        </Link>
-      </p>
+      <Suspense fallback={<p className="mt-8 text-ink-soft">Loading…</p>}>
+        <SignInForm />
+      </Suspense>
     </div>
   );
 }

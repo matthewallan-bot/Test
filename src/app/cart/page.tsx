@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { connection } from "next/server";
+import { Suspense } from "react";
+import { CartClient } from "@/components/cart-client";
+import { getCart } from "@/lib/cart";
 
 export const metadata: Metadata = {
   title: "Cart",
@@ -13,22 +16,24 @@ export default function CartPage() {
         Your cart
       </h1>
       <p className="mt-4 text-ink-soft">
-        Cart persistence against Postgres lands in a later phase. This page is
-        the route stub so checkout UX can attach next.
+        Guest carts use a session cookie; signed-in carts attach to your
+        account. Requires Postgres.
       </p>
-      <div className="mt-8 border border-dashed border-ink/20 bg-paper/60 px-4 py-10 text-center text-ink-soft">
-        No items yet — browse{" "}
-        <Link href="/merch" className="font-semibold text-signal">
-          merch
-        </Link>
-        .
-      </div>
-      <Link
-        href="/checkout"
-        className="mt-6 inline-flex rounded-sm bg-ink px-5 py-3 text-sm font-semibold uppercase tracking-wide text-paper hover:bg-signal"
+      <Suspense
+        fallback={
+          <div className="mt-8 border border-dashed border-ink/20 px-4 py-10 text-center text-ink-soft">
+            Loading cart…
+          </div>
+        }
       >
-        Checkout
-      </Link>
+        <CartBody />
+      </Suspense>
     </div>
   );
+}
+
+async function CartBody() {
+  await connection();
+  const cart = await getCart();
+  return <CartClient initial={cart} />;
 }

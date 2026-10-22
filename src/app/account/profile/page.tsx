@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
+import { Suspense } from "react";
+import { auth } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Profile",
@@ -13,20 +16,18 @@ export default function ProfilePage() {
         Profile
       </h1>
       <p className="mt-3 text-ink-soft">
-        Display name, email, and default address stubs. Prefill from{" "}
-        <code className="text-sm">users</code> /{" "}
-        <code className="text-sm">addresses</code> once Auth.js sessions are live.
+        Signed-in session from Auth.js (JWT cookie + optional{" "}
+        <code className="text-sm">sessions</code> row).
       </p>
-      <dl className="mt-8 space-y-4 border border-ink/15 bg-paper/70 p-5">
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-steel">Name</dt>
-          <dd className="mt-1 text-ink">—</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-steel">Email</dt>
-          <dd className="mt-1 text-ink">—</dd>
-        </div>
-      </dl>
+      <Suspense
+        fallback={
+          <dl className="mt-8 space-y-4 border border-ink/15 bg-paper/70 p-5 text-ink-soft">
+            Loading profile…
+          </dl>
+        }
+      >
+        <ProfileBody />
+      </Suspense>
       <Link
         href="/account/orders"
         className="mt-6 inline-flex text-sm font-semibold text-signal hover:text-signal-deep"
@@ -34,5 +35,27 @@ export default function ProfilePage() {
         Order history →
       </Link>
     </div>
+  );
+}
+
+async function ProfileBody() {
+  await connection();
+  const session = await auth();
+
+  return (
+    <dl className="mt-8 space-y-4 border border-ink/15 bg-paper/70 p-5">
+      <div>
+        <dt className="text-xs uppercase tracking-wide text-steel">Name</dt>
+        <dd className="mt-1 text-ink">{session?.user?.name ?? "—"}</dd>
+      </div>
+      <div>
+        <dt className="text-xs uppercase tracking-wide text-steel">Email</dt>
+        <dd className="mt-1 text-ink">{session?.user?.email ?? "—"}</dd>
+      </div>
+      <div>
+        <dt className="text-xs uppercase tracking-wide text-steel">Role</dt>
+        <dd className="mt-1 text-ink">{session?.user?.role ?? "customer"}</dd>
+      </div>
+    </dl>
   );
 }
