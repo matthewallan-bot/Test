@@ -328,5 +328,177 @@ export async function applyPaymentWebhook(event: {
   }
 }
 
+export type OrderListItem = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  fulfillmentStatus: string;
+  currency: string;
+  totalCents: number;
+  placedAt: string | null;
+  createdAt: string;
+  itemCount: number;
+};
+
+export type OrderLineItem = {
+  id: string;
+  sku: string;
+  productName: string;
+  variantName: string;
+  quantity: number;
+  unitPriceCents: number;
+  lineTotalCents: number;
+};
+
+export type OrderDetail = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  fulfillmentStatus: string;
+  currency: string;
+  subtotalCents: number;
+  shippingCents: number;
+  taxCents: number;
+  totalCents: number;
+  email: string;
+  shippingAddress: Record<string, unknown>;
+  placedAt: string | null;
+  createdAt: string;
+  items: OrderLineItem[];
+};
+
+type OrderListRow = {
+  id: string;
+  order_number: string;
+  status: string;
+  fulfillment_status: string;
+  currency: string;
+  total_cents: number;
+  placed_at: Date | string | null;
+  created_at: Date | string;
+  item_count: string | number;
+};
+
+type OrderDetailRow = {
+  id: string;
+  order_number: string;
+  status: string;
+  fulfillment_status: string;
+  currency: string;
+  subtotal_cents: number;
+  shipping_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  email: string;
+  shipping_address: Record<string, unknown>;
+  placed_at: Date | string | null;
+  created_at: Date | string;
+};
+
+type OrderItemRow = {
+  id: string;
+  sku: string;
+  product_name: string;
+  variant_name: string;
+  quantity: number;
+  unit_price_cents: number;
+  line_total_cents: number;
+};
+
+function toIso(value: Date | string | null): string | null {
+  if (value == null) return null;
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
+
+/** Orders for the signed-in user, newest first. Empty when DB unset or no rows. */
+export async function listOrdersForUser(
+  userId: string,
+): Promise<OrderListItem[]> {
+  if (!isDatabaseConfigured()) return [];
+
+  const result = await query<OrderListRow>(
+    `SELECT o.id, o.order_number, o.status::text AS status,
+            o.fulfillment_status, o.currency, o.total_cents,
+            o.placed_at, o.created_at,
+            COALESCE(COUNT(oi.id), 0) AS item_count
+     FROM orders o
+     LEFT JOIN order_items oi ON oi.order_id = o.id
+     WHERE o.user_id = $1
+     GROUP BY o.id
+     ORDER BY COALESCE(o.placed_at, o.created_at) DESC`,
+    [userId],
+  );
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    orderNumber: row.order_number,
+    status: row.status,
+    fulfillmentStatus: row.fulfillment_status,
+    currency: row.currency,
+    totalCents: row.total_cents,
+    placedAt: toIso(row.placed_at),
+    createdAt: toIso(row.created_at) ?? new Date().toISOString(),
+    itemCount: Number(row.item_count),
+  }));
+}
+
+/** Single order owned by the user, or null if missing / not theirs. */
+export async function getOrderForUser(
+  userId: string,
+  orderNumber: string,
+): Promise<OrderDetail | null> {
+  if (!isDatabaseConfigured()) return null;
+
+  const orderResult = await query<OrderDetailRow>(
+    `SELECT id, order_number, status::text AS status, fulfillment_status,
+            currency, subtotal_cents, shipping_cents, tax_cents, total_cents,
+            email::text AS email, shipping_address, placed_at, created_at
+     FROM orders
+     WHERE user_id = $1 AND order_number = $2
+     LIMIT 1`,
+    [userId, orderNumber],
+  );
+  const order = orderResult.rows[0];
+  if (!order) return null;
+
+  const items = await query<OrderItemRow>(
+    `SELECT id, sku, product_name, variant_name, quantity,
+            unit_price_cents, line_total_cents
+     FROM order_items
+     WHERE order_id = $1
+     ORDER BY product_name, variant_name`,
+    [order.id],
+  );
+
+  return {
+    id: order.id,
+    orderNumber: order.order_number,
+    status: order.status,
+    fulfillmentStatus: order.fulfillment_status,
+    currency: order.currency,
+    subtotalCents: order.subtotal_cents,
+    shippingCents: order.shipping_cents,
+    taxCents: order.tax_cents,
+    totalCents: order.total_cents,
+    email: order.email,
+    shippingAddress:
+      order.shipping_address && typeof order.shipping_address === "object"
+        ? order.shipping_address
+        : {},
+    placedAt: toIso(order.placed_at),
+    createdAt: toIso(order.created_at) ?? new Date().toISOString(),
+    items: items.rows.map((row) => ({
+      id: row.id,
+      sku: row.sku,
+      productName: row.product_name,
+      variantName: row.variant_name,
+      quantity: row.quantity,
+      unitPriceCents: row.unit_price_cents,
+      lineTotalCents: row.line_total_cents,
+    })),
+  };
+}
+
 /** Expose cart type for API responses. */
 export type { CartView };
