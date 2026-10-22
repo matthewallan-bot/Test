@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { connection } from "next/server";
+import { Suspense } from "react";
+import { DonateButtons } from "@/components/donate-buttons";
 import { MusicPlayer } from "@/components/music-player";
-import { PLACEHOLDER_TRACKS } from "@/data/tracks";
+import { listTracks } from "@/lib/music-data";
 
 export const metadata: Metadata = {
   title: "Music",
@@ -20,38 +22,35 @@ export default function MusicPage() {
         are optional gratitude, never a gate.
       </p>
 
-      <div className="mt-10">
-        <MusicPlayer tracks={PLACEHOLDER_TRACKS} />
-      </div>
+      <Suspense
+        fallback={
+          <div className="mt-10 text-ink-soft">Loading player…</div>
+        }
+      >
+        <MusicBody />
+      </Suspense>
 
       <aside className="mt-12 border border-ink/15 bg-ink px-5 py-6 text-paper">
         <h2 className="font-[family-name:var(--font-display)] text-2xl tracking-wide">
           Support the band
         </h2>
         <p className="mt-2 text-sm text-ash">
-          Preset amounts and Stripe Checkout will hook into{" "}
+          Opens Stripe Checkout for a donation (
           <code className="text-ash-deep">donations</code> +{" "}
-          <code className="text-ash-deep">payments</code> through the thin
-          adapter.
+          <code className="text-ash-deep">payments</code>).
         </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {["$5", "$10", "$25"].map((amount) => (
-            <button
-              key={amount}
-              type="button"
-              className="rounded-sm border border-paper/30 px-4 py-2 text-sm font-semibold hover:border-signal hover:text-signal"
-            >
-              {amount}
-            </button>
-          ))}
-          <Link
-            href="/socials"
-            className="rounded-sm bg-signal px-4 py-2 text-sm font-semibold text-paper hover:bg-signal-deep"
-          >
-            Listen elsewhere
-          </Link>
-        </div>
+        <DonateButtons />
       </aside>
+    </div>
+  );
+}
+
+async function MusicBody() {
+  await connection();
+  const tracks = await listTracks();
+  return (
+    <div className="mt-10">
+      <MusicPlayer tracks={tracks} />
     </div>
   );
 }

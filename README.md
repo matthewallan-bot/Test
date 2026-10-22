@@ -10,66 +10,89 @@ Official band site: merch ecommerce, accounts, free self-hosted music streaming,
 |-------|--------|
 | App | Next.js App Router (TypeScript, ESLint, Tailwind) |
 | Database | Postgres (Neon-ready) — SQL migrations in `db/migrations/` |
-| Auth | Auth.js (`next-auth` v5) stub |
+| Auth | Auth.js (`next-auth` v5) credentials + bcrypt against `users` |
 | Payments | Stripe behind a thin adapter (`src/lib/payments`) |
 | Media | Cloudflare R2 / S3-compatible for images + audio |
 
 Cost-first: Neon free tier, Vercel Hobby, R2, Stripe test mode.
 
-## Quick start
+## Quick start (UI without secrets)
 
 ```bash
 npm install
 cp .env.example .env.local
-# fill AUTH_SECRET at minimum for Auth.js
+# optional for UI-only: leave DATABASE_URL / Stripe unset
+# set AUTH_SECRET for Auth.js (required for protected /account routes)
+openssl rand -base64 32   # paste into AUTH_SECRET
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). Merch / tour / music / socials fall back to in-repo seed data when `DATABASE_URL` is unset.
 
-## Environment setup
+## Full local setup (Neon + Auth + Stripe test)
 
-### 1. Neon Postgres
+### 1. Create a free Neon database
 
-1. Create a Neon project and copy the connection string.
-2. Set `DATABASE_URL` in `.env.local`.
-3. Apply migrations in order:
+1. Sign up at [neon.tech](https://neon.tech) and create a project.
+2. Copy the connection string (include `?sslmode=require`).
+3. Put it in `.env.local` as `DATABASE_URL`.
+4. Leave `DATABASE_SSL=true` (default) for Neon.
+
+Any Postgres URL works — the client is not Neon-specific.
+
+### 2. Run migrations + seed
 
 ```bash
-# example with psql
-psql "$DATABASE_URL" -f db/migrations/001_extensions_and_types.sql
-psql "$DATABASE_URL" -f db/migrations/002_users_auth.sql
-psql "$DATABASE_URL" -f db/migrations/003_catalog.sql
-psql "$DATABASE_URL" -f db/migrations/004_cart_orders.sql
-psql "$DATABASE_URL" -f db/migrations/005_donations_payments.sql
-psql "$DATABASE_URL" -f db/migrations/006_music.sql
-psql "$DATABASE_URL" -f db/migrations/007_tour.sql
-psql "$DATABASE_URL" -f db/migrations/008_site_content.sql
+npm run db:migrate   # applies db/migrations/* once (tracked in schema_migrations)
+npm run db:seed      # loads db/seed.sql sample catalog, tour, music, socials, demo admin
 ```
 
-Schema matches the Project store `database-schema.md` (users, catalog, cart/orders, donations, payments with Stripe provider, music tracks with self-hosted file fields, tour, social embeds).
+**Demo admin (seed only):**
 
-### 2. Auth.js
+| Field | Value |
+|-------|--------|
+| Email | `admin@fixedreaction.demo` |
+| Password | `fixed-reaction-demo` |
+
+The password hash is stored in `db/seed.sql`; do not use this account in production.
+
+### 3. Auth.js secret
 
 ```bash
 openssl rand -base64 32
 ```
 
-Set `AUTH_SECRET` and `AUTH_URL` (local: `http://localhost:3000`). Credentials provider is stubbed in `src/lib/auth.ts` — replace with real password-hash checks against `users`.
+Set `AUTH_SECRET` and `AUTH_URL=http://localhost:3000`. Sign-up posts to `/api/auth/register` (bcrypt hash into `users`). Sign-in verifies credentials; JWT sessions are issued and a row is written to `sessions`. Routes under `/account/*` require a session (middleware).
 
-### 3. Stripe (test keys)
+### 4. Stripe test keys
 
-1. Create a Stripe account and copy **test** secret + publishable keys.
+1. Create a Stripe account → Developers → API keys → **test** mode.
 2. Set `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
-3. Optional webhook secret for later: `STRIPE_WEBHOOK_SECRET`.
-4. Keep `PAYMENTS_PROVIDER=stripe`. Domain code should call `getPaymentsAdapter()` from `src/lib/payments` (not Stripe types directly).
+3. For webhooks (payment status updates on orders/donations):
 
-### 4. Cloudflare R2
+```bash
+# optional local forward
+stripe listen --forward-to localhost:3000/api/webhooks/stripe
+```
+
+Set `STRIPE_WEBHOOK_SECRET` from the listen output. Keep `PAYMENTS_PROVIDER=stripe`. Domain code calls `getPaymentsAdapter()` from `src/lib/payments` (not Stripe types directly).
+
+### 5. Cloudflare R2 (optional for real audio files)
 
 1. Create an R2 bucket for merch images and audio.
-2. Create an API token with object read/write.
-3. Set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_BASE_URL`.
-4. Upload tracks; store `storage_key` / public `storage_url` on `tracks` rows. The Music page player uses progressive `<audio>` against those URLs (placeholder tracks in `src/data/tracks.ts` until DB is seeded).
+2. Set `R2_*` vars from `.env.example`.
+3. Upload tracks; update `tracks.storage_key` / `storage_url` (seed uses placeholder public MP3 URLs).
+
+## API surface (Phase 2)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET/POST/PATCH | `/api/cart` | Read / add / set quantity |
+| POST | `/api/checkout/create-session` | Order + Stripe Checkout Session |
+| POST | `/api/donations/create-session` | Donation + Stripe Checkout Session |
+| POST | `/api/webhooks/stripe` | Payment status → orders/donations |
+| POST | `/api/auth/register` | Create user with hashed password |
+| * | `/api/auth/[...nextauth]` | Auth.js handlers |
 
 ## Routes
 
@@ -77,20 +100,22 @@ Set `AUTH_SECRET` and `AUTH_URL` (local: `http://localhost:3000`). Credentials p
 |------|--------|
 | `/` | Brand-first Fixed Reaction home |
 | `/about` | Bio |
-| `/tour` | Tour dates (seed data) |
-| `/merch`, `/merch/[slug]` | Catalog stubs |
-| `/cart`, `/checkout`, `/checkout/success` | Checkout stubs |
+| `/tour` | Tour dates (DB or seed fallback) |
+| `/merch`, `/merch/[slug]` | Catalog (DB or seed); add to cart |
+| `/cart`, `/checkout`, `/checkout/success` | Cart + Stripe Checkout |
 | `/music` | Self-hosted audio player + donate CTA |
-| `/socials` | Enabled embeds from seed config |
-| `/auth/*`, `/account/*` | Auth / account stubs |
+| `/socials` | Enabled embeds |
+| `/auth/*`, `/account/*` | Auth / protected account |
 
 ## Scripts
 
 ```bash
-npm run dev      # local development
-npm run build    # production build
-npm run start    # serve build
-npm run lint     # ESLint
+npm run dev         # local development
+npm run build       # production build
+npm run start       # serve build
+npm run lint        # ESLint
+npm run db:migrate  # apply SQL migrations
+npm run db:seed     # sample data
 ```
 
 ## Project docs

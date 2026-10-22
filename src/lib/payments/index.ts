@@ -2,8 +2,10 @@ import { stripePaymentsAdapter } from "./stripe";
 import type { PaymentsAdapter } from "./types";
 
 export type {
+  CheckoutLineItem,
   CreateCheckoutSessionInput,
   CreateCheckoutSessionResult,
+  ParsedWebhookEvent,
   PaymentKind,
   PaymentStatus,
   PaymentsAdapter,

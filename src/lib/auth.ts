@@ -1,11 +1,48 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import { createHash, randomUUID } from "node:crypto";
+import { authConfig } from "@/lib/auth.config";
+import { isDatabaseConfigured, query } from "@/lib/db";
+import { verifyPassword } from "@/lib/password";
+
+type DbUser = {
+  id: string;
+  email: string;
+  password_hash: string | null;
+  display_name: string | null;
+  role: string;
+};
+
+async function findUserByEmail(email: string): Promise<DbUser | null> {
+  if (!isDatabaseConfigured()) return null;
+  const result = await query<DbUser>(
+    `SELECT id, email::text AS email, password_hash, display_name, role::text AS role
+     FROM users WHERE email = $1`,
+    [email.toLowerCase()],
+  );
+  return result.rows[0] ?? null;
+}
+
+/** Persist a session row for audit / future revocation (JWT is the live session). */
+async function persistSessionRow(userId: string): Promise<void> {
+  if (!isDatabaseConfigured()) return;
+  const token = randomUUID();
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  await query(
+    `INSERT INTO sessions (user_id, token_hash, expires_at)
+     VALUES ($1, $2, $3)`,
+    [userId, tokenHash, expiresAt.toISOString()],
+  );
+}
 
 /**
- * Auth.js stub — wire Credentials (or magic link / OAuth) to `users` /
- * `sessions` tables once Neon is connected. No real password verification yet.
+ * Auth.js credentials against hashed passwords in `users`.
+ * Requires DATABASE_URL + seeded/registered users. Sessions use JWT cookies;
+ * a matching row is also written to `sessions` on successful sign-in.
  */
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  ...authConfig,
   providers: [
     Credentials({
       name: "Email",
@@ -15,23 +52,40 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
       async authorize(credentials) {
         const email = credentials?.email;
-        if (typeof email !== "string" || !email.includes("@")) {
+        const password = credentials?.password;
+        if (typeof email !== "string" || typeof password !== "string") {
           return null;
         }
-        // Stub: accept any email/password pair for local UI smoke tests only.
-        // Replace with password_hash verification against Postgres.
+        if (!email.includes("@") || password.length < 1) {
+          return null;
+        }
+        if (!isDatabaseConfigured()) {
+          console.error(
+            "[auth] DATABASE_URL is not set — cannot verify credentials",
+          );
+          return null;
+        }
+
+        const user = await findUserByEmail(email);
+        if (!user?.password_hash) return null;
+
+        const ok = await verifyPassword(password, user.password_hash);
+        if (!ok) return null;
+
+        try {
+          await persistSessionRow(user.id);
+        } catch (err) {
+          console.error("[auth] session persist failed", err);
+        }
+
         return {
-          id: "stub-user",
-          email,
-          name: email.split("@")[0] ?? "Fan",
+          id: user.id,
+          email: user.email,
+          name: user.display_name ?? user.email.split("@")[0] ?? "Fan",
+          role: user.role,
         };
       },
     }),
   ],
-  pages: {
-    signIn: "/auth/sign-in",
-  },
-  session: { strategy: "jwt" },
   secret: process.env.AUTH_SECRET,
-  trustHost: true,
 });
